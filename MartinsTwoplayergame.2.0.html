@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Multiplayer Tank Battle</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { margin: 0; background: #222; color: #fff; font-family: 'Courier New', Courier, monospace; overflow: hidden; touch-action: none; }
+        canvas { background: #3e4e2c; display: block; margin: 0 auto; border: 5px solid #555; width: 100vw; height: 60vh; }
+        #ui { padding: 10px; text-align: center; }
+        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 200px; margin: 10px auto; }
+        button { padding: 15px; background: #444; color: white; border: 2px solid #888; border-radius: 8px; font-weight: bold; }
+        .fire-btn { background: #aa0000; grid-column: span 3; }
+        input { padding: 10px; width: 150px; border-radius: 5px; border: none; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="setup">
+    <h3>TANK BATTLE</h3>
+    <p>Your ID: <span id="my-id" style="color:yellow">...</span></p>
+    <input type="text" id="peer-id" placeholder="Friend's ID">
+    <button onclick="connect()">JOIN FRIEND</button>
+    <p id="status">Status: Waiting...</p>
+</div>
+
+<canvas id="game"></canvas>
+
+<div id="ui">
+    <div class="controls">
+        <div></div><button ontouchstart="move('U')" ontouchend="stop()">UP</button><div></div>
+        <button ontouchstart="move('L')" ontouchend="stop()">LEFT</button>
+        <button ontouchstart="move('D')" ontouchend="stop()">DOWN</button>
+        <button ontouchstart="move('R')" ontouchend="stop()">RIGHT</button>
+        <button class="fire-btn" onclick="shoot()">FIRE CANNON</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight * 0.6;
+
+    let peer = new Peer():// This will tell you the exact error in the 'status' text
+peer.on('error', (err) => {
+    document.getElementById('status').innerText = "Error: " + err.type;
+    console.error(err);
+});
+    let conn;
+    let myTank = { x: 50, y: 50, color: 'blue', dir: 'R' };
+    let enemyTank = { x: 250, y: 50, color: 'red', dir: 'L' };
+    let bullets = [];
+
+    peer.on('open', id => document.getElementById('my-id').innerText = id);
+
+    // Host Listener
+    peer.on('connection', c => {
+        conn = c;
+        setupConn();
+    });
+
+    // Client Connector
+    function connect() {
+        const id = document.getElementById('peer-id').value;
+        conn = peer.connect(id);
+        setupConn();
+    }
+
+    function setupConn() {
+        conn.on('open', () => {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('status').innerText = "Battle Active!";
+            setInterval(update, 30);
+        });
+        conn.on('data', data => {
+            enemyTank = data.tank;
+            if(data.shot) bullets.push(data.shot);
+        });
+    }
+
+    function move(d) {
+        myTank.dir = d;
+        if(d=='U') myTank.y -= 10;
+        if(d=='D') myTank.y += 10;
+        if(d=='L') myTank.x -= 10;
+        if(d=='R') myTank.x += 10;
+        sync();
+    }
+
+    function stop() {}
+
+    function shoot() {
+        let b = { x: myTank.x + 15, y: myTank.y + 15, d: myTank.dir, age: 0 };
+        bullets.push(b);
+        sync(b);
+    }
+
+    function sync(shot = null) {
+        if(conn && conn.open) conn.send({ tank: myTank, shot: shot });
+    }
+
+    function update() {
+        ctx.clearRect(0,0,canvas.width, canvas.height);
+        
+        // Draw Tanks
+        ctx.fillStyle = myTank.color;
+        ctx.fillRect(myTank.x, myTank.y, 30, 30);
+        ctx.fillStyle = enemyTank.color;
+        ctx.fillRect(enemyTank.x, enemyTank.y, 30, 30);
+
+        // Update & Draw Bullets
+        ctx.fillStyle = "yellow";
+        bullets.forEach((b, i) => {
+            if(b.d == 'U') b.y -= 7;
+            if(b.d == 'D') b.y += 7;
+            if(b.d == 'L') b.x -= 7;
+            if(b.d == 'R') b.x += 7;
+            ctx.fillRect(b.x, b.y, 5, 5);
+            b.age++;
+            if(b.age > 100) bullets.splice(i, 1);
+        });
+    }
+</script>
+</body>
+</html>
